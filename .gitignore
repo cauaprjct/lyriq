@@ -1,0 +1,20 @@
+node_modules
+dist
+dist-ssr
+*.local
+.vercel
+.DS_Store
+
+*.tsbuildinfo
+
+# old prototype + raw source lyrics (not part of the app)
+treino.html
+musica.txt
+traducao.txt
+significado.txt
+
+# scratch
+commit.txt
+
+.vercel
+.env*
