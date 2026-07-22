@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Analytics } from "@vercel/analytics/react";
 import { APP } from "./config";
 import type { Mode, SongMeta, TrainerItem } from "./types";
 import { Setup } from "./screens/Setup";
@@ -40,6 +41,7 @@ export function App() {
           </p>
         </footer>
       </main>
+      <Analytics />
     </>
   );
 }

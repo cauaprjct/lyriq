@@ -4,7 +4,7 @@ Aprenda inglês escrevendo as músicas que você ama. Cole o link de uma música
 YouTube, o app descobre a faixa, busca a letra e a tradução, e te desafia a
 digitar cada verso em inglês, com correção **palavra por palavra**.
 
-**Demo ao vivo:** https://ritmo-pompeii.vercel.app
+**Demo ao vivo:** https://lyriq-learn.vercel.app
 
 ![Tela inicial do Lyriq](screenshots/home.png)
 ![Correção palavra por palavra](screenshots/trainer.png)
