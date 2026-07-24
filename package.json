@@ -1,9 +1,9 @@
 {
-  "name": "ritmo-pompeii",
+  "name": "lyriq",
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Aprenda ingles escrevendo os versos de Pompeii (Bastille).",
+  "description": "Aprenda ingles escrevendo as musicas que voce ama, com correcao palavra por palavra.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

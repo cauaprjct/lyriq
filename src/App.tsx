@@ -36,8 +36,8 @@ export function App() {
 
         <footer className="foot">
           <p>
-            <kbd>Enter</kbd> confere · <kbd>Shift</kbd>+<kbd>Enter</kbd> quebra linha · {APP.name}{" "}
-            usa letras do lyrics.ovh e tradução do MyMemory.
+            {APP.name} — aprenda inglês escrevendo música. Letras via lyrics.ovh, tradução via
+            MyMemory. Nada é armazenado.
           </p>
         </footer>
       </main>

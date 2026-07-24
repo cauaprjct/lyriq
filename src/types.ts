@@ -30,6 +30,15 @@ export interface TranslateResponse {
   error?: string;
 }
 
+export interface SyncedResponse {
+  hasSync: boolean;
+  syncedLyrics: string;
+  plainLyrics: string;
+  artist: string;
+  title: string;
+  error?: string;
+}
+
 export interface NativeLang {
   code: string;
   label: string;
@@ -42,3 +51,39 @@ export const NATIVE_LANGS: NativeLang[] = [
   { code: "de-DE", label: "Deutsch" },
   { code: "it-IT", label: "Italiano" },
 ];
+
+export type Level = "iniciante" | "intermediario" | "avancado";
+
+export interface LevelInfo {
+  label: string;
+  /** Short hint shown near the level filter. */
+  blurb: string;
+  order: number;
+}
+
+export const LEVELS: Record<Level, LevelInfo> = {
+  iniciante: {
+    label: "Iniciante",
+    blurb: "Ritmo calmo, vocabulário do dia a dia, versos que se repetem.",
+    order: 0,
+  },
+  intermediario: {
+    label: "Intermediário",
+    blurb: "Frases mais longas e expressões comuns do inglês falado.",
+    order: 1,
+  },
+  avancado: {
+    label: "Avançado",
+    blurb: "Rápido e denso, com gírias e imagens menos literais.",
+    order: 2,
+  },
+};
+
+export interface CatalogSong {
+  /** Stable key used for progress storage — the YouTube video id. */
+  videoId: string;
+  artist: string;
+  song: string;
+  level: Level;
+  year?: number;
+}

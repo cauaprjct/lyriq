@@ -1,4 +1,5 @@
 import type { TrainerStats } from "../hooks/useTrainer";
+import type { RecordResult } from "../lib/progress";
 
 interface Props {
   stats: TrainerStats;
@@ -6,6 +7,7 @@ interface Props {
   total: number;
   onRestart: () => void;
   youtubeUrl: string;
+  record?: RecordResult | null;
 }
 
 function formatDuration(start: number | null, end: number | null): string {
@@ -23,13 +25,33 @@ function verdict(accuracy: number): string {
   return "Bom come\u00E7o. A repeti\u00E7\u00E3o \u00E9 que ensina.";
 }
 
-export function Results({ stats, accuracy, total, onRestart, youtubeUrl }: Props) {
+function recordNote(record: RecordResult | null | undefined): string | null {
+  if (!record) return null;
+  if (record.isRecord) {
+    return record.previousBest > 0
+      ? `Novo recorde — antes ${record.previousBest}%`
+      : "Primeira vez nessa música";
+  }
+  if (record.entry.plays > 1) {
+    return `Seu recorde nessa música: ${record.entry.bestAccuracy}%`;
+  }
+  return null;
+}
+
+export function Results({ stats, accuracy, total, onRestart, youtubeUrl, record }: Props) {
+  const note = recordNote(record);
   return (
     <section className="results" aria-labelledby="results-title">
       <p className="results__kicker">Fim da música</p>
       <h2 id="results-title" className="results__title">
         {verdict(accuracy)}
       </h2>
+
+      {note && (
+        <p className={`record-note ${record?.isRecord ? "record-note--new" : ""}`}>
+          {note}
+        </p>
+      )}
 
       <div className="stat-grid">
         <div className="stat">

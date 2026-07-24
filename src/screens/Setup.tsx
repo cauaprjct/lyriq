@@ -1,16 +1,34 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { APP } from "../config";
-import { NATIVE_LANGS, type Mode, type SongMeta, type TrainerItem } from "../types";
+import {
+  LEVELS,
+  NATIVE_LANGS,
+  type CatalogSong,
+  type Level,
+  type Mode,
+  type SongMeta,
+  type TrainerItem,
+} from "../types";
 import { fetchSong, translateLines } from "../lib/api";
 import { buildItems, isFiller, textToLines } from "../lib/lyrics";
+import { CATALOG, thumbFor, watchUrl } from "../data/catalog";
+import { loadProgress, summarize } from "../lib/progress";
 import { DEMO_ITEMS, DEMO_META } from "../data/demo";
 
 type Step = "input" | "review";
+type Filter = Level | "todos";
 
 interface Props {
   onStart: (items: TrainerItem[], meta: SongMeta, mode: Mode) => void;
 }
+
+const FILTERS: { key: Filter; label: string }[] = [
+  { key: "todos", label: "Todos" },
+  { key: "iniciante", label: "Iniciante" },
+  { key: "intermediario", label: "Intermediário" },
+  { key: "avancado", label: "Avançado" },
+];
 
 export function Setup({ onStart }: Props) {
   const [step, setStep] = useState<Step>("input");
@@ -24,16 +42,33 @@ export function Setup({ onStart }: Props) {
 
   const [busy, setBusy] = useState(false);
   const [busyLabel, setBusyLabel] = useState("");
+  const [pickingId, setPickingId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
-  async function handleSearch(searchOverrides?: { artist: string; title: string }) {
+  const [filter, setFilter] = useState<Filter>("todos");
+
+  // Local progress (browser-only). Read once; used to badge catalog cards.
+  const progress = useMemo(() => loadProgress(), []);
+  const summary = useMemo(() => summarize(progress), [progress]);
+
+  const shownSongs = useMemo(
+    () => (filter === "todos" ? CATALOG : CATALOG.filter((s) => s.level === filter)),
+    [filter]
+  );
+
+  async function handleSearch(opts?: {
+    urlArg?: string;
+    overrides?: { artist: string; title: string };
+  }) {
+    const target = opts?.urlArg ?? url;
+    if (!target.trim()) return;
     setError("");
     setNotice("");
     setBusy(true);
     setBusyLabel("Buscando a música…");
     try {
-      const data = await fetchSong(url, searchOverrides);
+      const data = await fetchSong(target, opts?.overrides);
       setMeta(data);
       setArtist(data.artist);
       setSong(data.song);
@@ -50,7 +85,15 @@ export function Setup({ onStart }: Props) {
       setError(e instanceof Error ? e.message : "Algo deu errado.");
     } finally {
       setBusy(false);
+      setPickingId(null);
     }
+  }
+
+  function handlePick(s: CatalogSong) {
+    setPickingId(s.videoId);
+    const link = watchUrl(s.videoId);
+    setUrl(link);
+    void handleSearch({ urlArg: link, overrides: { artist: s.artist, title: s.song } });
   }
 
   async function handleStart() {
@@ -104,52 +147,124 @@ export function Setup({ onStart }: Props) {
       </header>
 
       {step === "input" ? (
-        <div className="card">
-          <p className="card__label">Cole o link de uma música no YouTube</p>
-          <p className="prompt prompt--home">
-            Qual música você quer <em>escrever</em> hoje?
-          </p>
+        <div className="home">
+          <section className="catalog" aria-labelledby="catalog-title">
+            <div className="section-head">
+              <h2 id="catalog-title" className="section-title">
+                Comece por uma música
+              </h2>
+              <p className="section-sub">
+                {summary.songsPracticed > 0
+                  ? `Você já treinou ${summary.songsPracticed} ${
+                      summary.songsPracticed === 1 ? "música" : "músicas"
+                    }. Continue de onde parou ou tente uma nova.`
+                  : "Escolhas com letra clara pra escrever ouvindo. Toque numa e revise antes de começar."}
+              </p>
+            </div>
 
-          <div className="url-row">
-            <input
-              className="input input--url"
-              type="url"
-              inputMode="url"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && url.trim() && handleSearch()}
-              placeholder="https://youtube.com/watch?v=…"
-              autoComplete="off"
-              spellCheck={false}
-              disabled={busy}
-            />
-            <button
-              className="btn btn--primary"
-              onClick={() => handleSearch()}
-              disabled={busy || !url.trim()}
-            >
-              {busy ? busyLabel : "Buscar"}
-            </button>
+            <div className="filter" role="group" aria-label="Filtrar por nível">
+              {FILTERS.map((f) => (
+                <button
+                  key={f.key}
+                  type="button"
+                  className={filter === f.key ? "filter__chip filter__chip--on" : "filter__chip"}
+                  aria-pressed={filter === f.key}
+                  onClick={() => setFilter(f.key)}
+                  disabled={busy}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            <ul className="song-grid">
+              {shownSongs.map((s) => {
+                const best = progress[s.videoId]?.bestAccuracy;
+                const loading = pickingId === s.videoId;
+                return (
+                  <li key={s.videoId}>
+                    <button
+                      type="button"
+                      className="songcard"
+                      onClick={() => handlePick(s)}
+                      disabled={busy}
+                      aria-busy={loading}
+                    >
+                      <span className="songcard__cover">
+                        <img
+                          className="songcard__art"
+                          src={thumbFor(s.videoId)}
+                          alt=""
+                          loading="lazy"
+                          width={480}
+                          height={360}
+                        />
+                        <span className={`badge badge--${s.level}`}>
+                          {LEVELS[s.level].label}
+                        </span>
+                        {loading && <span className="songcard__loading">Abrindo…</span>}
+                      </span>
+                      <span className="songcard__body">
+                        <span className="songcard__song">{s.song}</span>
+                        <span className="songcard__artist">
+                          {s.artist}
+                          {s.year ? ` · ${s.year}` : ""}
+                        </span>
+                      </span>
+                      {typeof best === "number" && (
+                        <span className="songcard__best" title="Sua melhor precisão">
+                          Melhor {best}%
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+
+          <div className="paste">
+            <div className="divider">
+              <span>ou cole um link do YouTube</span>
+            </div>
+
+            <div className="url-row">
+              <input
+                className="input input--url"
+                type="url"
+                inputMode="url"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && url.trim() && handleSearch()}
+                placeholder="https://youtube.com/watch?v=…"
+                autoComplete="off"
+                spellCheck={false}
+                disabled={busy}
+              />
+              <button
+                className="btn btn--primary"
+                onClick={() => handleSearch()}
+                disabled={busy || !url.trim()}
+              >
+                {busy && pickingId === null ? busyLabel : "Buscar"}
+              </button>
+            </div>
+
+            {error && <p className="alert alert--error">{error}</p>}
+
+            <p className="setup-hint">
+              Funciona melhor com músicas em inglês. Você revisa a letra e a tradução antes de
+              começar — nada fica salvo.{" "}
+              <button
+                type="button"
+                className="linklike"
+                onClick={() => onStart(DEMO_ITEMS, DEMO_META, "translate")}
+                disabled={busy}
+              >
+                Ver uma demonstração
+              </button>
+            </p>
           </div>
-
-          {error && <p className="alert alert--error">{error}</p>}
-
-          <p className="setup-hint">
-            Funciona melhor com músicas em inglês. Você revisa a letra e a tradução antes de
-            começar.
-          </p>
-
-          <div className="divider">
-            <span>ou</span>
-          </div>
-
-          <button
-            className="btn btn--ghost btn--block"
-            onClick={() => onStart(DEMO_ITEMS, DEMO_META, "translate")}
-            disabled={busy}
-          >
-            Experimentar com “Pompeii” — Bastille
-          </button>
         </div>
       ) : (
         <div className="card">
@@ -175,7 +290,7 @@ export function Setup({ onStart }: Props) {
                 </label>
                 <button
                   className="btn btn--ghost btn--sm"
-                  onClick={() => handleSearch({ artist, title: song })}
+                  onClick={() => handleSearch({ overrides: { artist, title: song } })}
                   disabled={busy}
                 >
                   {busy && busyLabel.includes("Busc") ? "Buscando…" : "Rebuscar letra"}
