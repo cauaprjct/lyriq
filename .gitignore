@@ -2,10 +2,13 @@ node_modules
 dist
 dist-ssr
 *.local
-.vercel
 .DS_Store
 
 *.tsbuildinfo
+
+# deploy / secrets
+.vercel
+.env*
 
 # old prototype + raw source lyrics (not part of the app)
 treino.html
@@ -15,9 +18,5 @@ significado.txt
 
 # scratch
 commit.txt
-
-.vercel
-.env*
-
-.vercel
-.env*
+_*.txt
+_*.log
