@@ -6,12 +6,16 @@ import {
   NATIVE_LANGS,
   type CatalogSong,
   type Level,
+  type Chunk,
   type Mode,
+  type Pace,
+  type Prefs,
   type SongMeta,
   type TrainerItem,
 } from "../types";
 import { fetchSong, translateLines } from "../lib/api";
-import { buildItems, isFiller, textToLines } from "../lib/lyrics";
+import { buildItems, flattenBlocks, stripFiller, textToBlocks } from "../lib/lyrics";
+import { loadPrefs, savePrefs } from "../lib/prefs";
 import { CATALOG, thumbFor, watchUrl } from "../data/catalog";
 import { loadProgress, summarize } from "../lib/progress";
 import { DEMO_ITEMS, DEMO_META } from "../data/demo";
@@ -20,7 +24,7 @@ type Step = "input" | "review";
 type Filter = Level | "todos";
 
 interface Props {
-  onStart: (items: TrainerItem[], meta: SongMeta, mode: Mode) => void;
+  onStart: (items: TrainerItem[], meta: SongMeta, mode: Mode, prefs: Prefs) => void;
 }
 
 const FILTERS: { key: Filter; label: string }[] = [
@@ -39,6 +43,7 @@ export function Setup({ onStart }: Props) {
   const [lyricsText, setLyricsText] = useState("");
   const [mode, setMode] = useState<Mode>("translate");
   const [lang, setLang] = useState("pt-BR");
+  const [prefs, setPrefs] = useState<Prefs>(() => loadPrefs());
 
   const [busy, setBusy] = useState(false);
   const [busyLabel, setBusyLabel] = useState("");
@@ -57,6 +62,18 @@ export function Setup({ onStart }: Props) {
     [filter]
   );
 
+  // Preview of how the lyrics will be split, so the choice isn't abstract.
+  const blocks = useMemo(() => textToBlocks(lyricsText), [lyricsText]);
+  const lineCount = useMemo(() => flattenBlocks(blocks).length, [blocks]);
+
+  function updatePrefs(patch: Partial<Prefs>) {
+    setPrefs((p) => {
+      const next = { ...p, ...patch };
+      savePrefs(next);
+      return next;
+    });
+  }
+
   async function handleSearch(opts?: {
     urlArg?: string;
     overrides?: { artist: string; title: string };
@@ -73,7 +90,7 @@ export function Setup({ onStart }: Props) {
       setArtist(data.artist);
       setSong(data.song);
       if (data.found) {
-        const clean = data.lines.filter((l) => !isFiller(l));
+        const clean = stripFiller(data.lines);
         setLyricsText((clean.length ? clean : data.lines).join("\n"));
         setNotice("");
       } else {
@@ -97,7 +114,7 @@ export function Setup({ onStart }: Props) {
   }
 
   async function handleStart() {
-    const lines = textToLines(lyricsText);
+    const lines = flattenBlocks(blocks);
     if (lines.length === 0) {
       setError("Cole ou busque a letra antes de começar.");
       return;
@@ -106,7 +123,7 @@ export function Setup({ onStart }: Props) {
     const finalMeta: SongMeta = { ...meta, artist, song };
 
     if (mode === "dictation") {
-      onStart(buildItems(lines, [], "dictation"), finalMeta, "dictation");
+      onStart(buildItems(blocks, [], "dictation", prefs.chunk), finalMeta, "dictation", prefs);
       return;
     }
 
@@ -120,7 +137,12 @@ export function Setup({ onStart }: Props) {
           "Algumas linhas não foram traduzidas (limite do tradutor). Você pode revisar no treino ou usar o modo ditado."
         );
       }
-      onStart(buildItems(lines, translations, "translate"), finalMeta, "translate");
+      onStart(
+        buildItems(blocks, translations, "translate", prefs.chunk),
+        finalMeta,
+        "translate",
+        prefs
+      );
     } catch (e) {
       setError(
         e instanceof Error ? `${e.message} Tente o modo ditado.` : "Falha ao traduzir."
@@ -258,7 +280,7 @@ export function Setup({ onStart }: Props) {
               <button
                 type="button"
                 className="linklike"
-                onClick={() => onStart(DEMO_ITEMS, DEMO_META, "translate")}
+                onClick={() => onStart(DEMO_ITEMS, DEMO_META, "translate", { ...prefs, chunk: "line" })}
                 disabled={busy}
               >
                 Ver uma demonstração
@@ -350,10 +372,75 @@ export function Setup({ onStart }: Props) {
             )}
           </div>
 
+          <div className="prefs">
+            <div className="prefs__row">
+              <div className="prefs__label">
+                <span className="prefs__title">Tamanho do trecho</span>
+                <span className="prefs__note">
+                  {prefs.chunk === "line"
+                    ? `Um verso por vez — ${lineCount} no total.`
+                    : `Um parágrafo por vez — ${blocks.length} ${
+                        blocks.length === 1 ? "trecho" : "trechos"
+                      }.`}
+                </span>
+              </div>
+              <fieldset className="segmented segmented--sm">
+                <legend className="sr-only">Tamanho do trecho</legend>
+                {(
+                  [
+                    { key: "line", label: "Frase" },
+                    { key: "block", label: "Parágrafo" },
+                  ] as { key: Chunk; label: string }[]
+                ).map((o) => (
+                  <label key={o.key} className={prefs.chunk === o.key ? "seg seg--on" : "seg"}>
+                    <input
+                      type="radio"
+                      name="chunk"
+                      checked={prefs.chunk === o.key}
+                      onChange={() => updatePrefs({ chunk: o.key })}
+                    />
+                    {o.label}
+                  </label>
+                ))}
+              </fieldset>
+            </div>
+
+            <div className="prefs__row">
+              <div className="prefs__label">
+                <span className="prefs__title">Ritmo</span>
+                <span className="prefs__note">
+                  {prefs.pace === "self"
+                    ? "Você decide quando ouvir e quando escrever."
+                    : "A música toca o trecho e para, esperando você escrever."}
+                </span>
+              </div>
+              <fieldset className="segmented segmented--sm">
+                <legend className="sr-only">Ritmo do treino</legend>
+                {(
+                  [
+                    { key: "self", label: "Meu ritmo" },
+                    { key: "song", label: "Acompanhar a música" },
+                  ] as { key: Pace; label: string }[]
+                ).map((o) => (
+                  <label key={o.key} className={prefs.pace === o.key ? "seg seg--on" : "seg"}>
+                    <input
+                      type="radio"
+                      name="pace"
+                      checked={prefs.pace === o.key}
+                      onChange={() => updatePrefs({ pace: o.key })}
+                    />
+                    {o.label}
+                  </label>
+                ))}
+              </fieldset>
+            </div>
+          </div>
+
           <p className="setup-hint">
             {mode === "translate"
-              ? "Cada verso vira uma dica na sua língua; você escreve em inglês."
-              : "Sem tradução: toque a música, ouça e escreva o verso em inglês."}
+              ? "Cada trecho vira uma dica na sua língua; você escreve em inglês."
+              : "Sem tradução: toque a música, ouça e escreva em inglês."}
+            {prefs.pace === "song" && " Precisa de letra sincronizada — se a música não tiver, o treino segue no seu ritmo."}
           </p>
 
           {error && <p className="alert alert--error">{error}</p>}

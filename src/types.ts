@@ -1,5 +1,16 @@
 export type Mode = "translate" | "dictation";
 
+/** How much of the song the learner types at once. */
+export type Chunk = "line" | "block";
+
+/** Who sets the tempo: the learner, or the song itself. */
+export type Pace = "self" | "song";
+
+export interface Prefs {
+  chunk: Chunk;
+  pace: Pace;
+}
+
 export interface TrainerItem {
   /** The line the learner must type (original lyric, e.g. English). */
   answer: string;

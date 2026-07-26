@@ -7,12 +7,13 @@ import { fetchSynced } from "../lib/api";
 import {
   buildTimeIndex,
   displayLines,
-  findVerseTime,
+  findVerseSpan,
   paragraphStarts,
   parseLrc,
   type SyncedLine,
 } from "../lib/lrc";
-import type { Mode, SongMeta, TrainerItem } from "../types";
+import type { Mode, Pace, Prefs, SongMeta, TrainerItem } from "../types";
+import { savePrefs } from "../lib/prefs";
 import { Feedback } from "../components/Feedback";
 import { Results } from "../components/Results";
 import { MediaPanel } from "../components/MediaPanel";
@@ -28,6 +29,7 @@ interface Props {
   items: TrainerItem[];
   meta: SongMeta;
   mode: Mode;
+  prefs: Prefs;
   onExit: () => void;
 }
 
@@ -45,11 +47,15 @@ const EMPTY_SYNC: SyncState = {
   index: new Map(),
 };
 
-export function Trainer({ items, meta, mode, onExit }: Props) {
+export function Trainer({ items, meta, mode, prefs, onExit }: Props) {
   const t = useTrainer(items);
+  const isBlock = prefs.chunk === "block";
+  const [pace, setPace] = useState<Pace>(prefs.pace);
+  const wantsFollow = pace === "song";
+
   const [text, setText] = useState("");
-  const [listening, setListening] = useState(mode === "dictation");
-  const [mediaMounted, setMediaMounted] = useState(mode === "dictation");
+  const [listening, setListening] = useState(mode === "dictation" || wantsFollow);
+  const [mediaMounted, setMediaMounted] = useState(mode === "dictation" || wantsFollow);
   const [locked, setLocked] = useState(false);
   const [record, setRecord] = useState<RecordResult | null>(null);
 
@@ -61,6 +67,10 @@ export function Trainer({ items, meta, mode, onExit }: Props) {
   const timerRef = useRef<number | null>(null);
   const recordedRef = useRef(false);
   const pendingSeek = useRef<number | null>(null);
+  /** LRC time where playback should stop (set when we play a single chunk). */
+  const pauseAtRef = useRef<number | null>(null);
+  /** Chunk index we already auto-played, so we don't restart it on re-renders. */
+  const autoPlayedRef = useRef<number | null>(null);
 
   const { containerRef, ready, controller } = useYouTubePlayer(meta.videoId, mediaMounted);
 
@@ -68,7 +78,14 @@ export function Trainer({ items, meta, mode, onExit }: Props) {
   const graded = t.phase === "graded" && t.result !== null;
   const gradedWrong = graded && !t.result!.isPerfect;
 
-  const currentVerseTime = sync.hasSync ? findVerseTime(sync.index, t.current.answer) : null;
+  /** How many lines this chunk has — sizes the textarea in paragraph mode. */
+  const answerLines = t.current.answer.split("\n").length;
+  const currentSpan = sync.hasSync
+    ? findVerseSpan(sync.lines, sync.index, t.current.answer)
+    : null;
+  /** "Follow the song" only makes sense once we have timestamps for it. */
+  const following = wantsFollow && sync.hasSync;
+  const followUnavailable = wantsFollow && !sync.hasSync && !syncLoading;
 
   useEffect(() => {
     if (t.phase === "typing") inputRef.current?.focus();
@@ -147,23 +164,72 @@ export function Trainer({ items, meta, mode, onExit }: Props) {
     else pendingSeek.current = target;
   }
 
+  // Stop playback at the end of the chunk we asked for. Runs off the player's
+  // ticker (not React state) so typing never re-renders on every frame.
+  useEffect(() => {
+    if (!mediaMounted) return;
+    return controller.subscribe((playbackT) => {
+      const stopAt = pauseAtRef.current;
+      if (stopAt == null) return;
+      if (playbackT + offset >= stopAt - 0.08) {
+        pauseAtRef.current = null;
+        controller.pause();
+      }
+    });
+  }, [mediaMounted, controller, offset]);
+
+  // "Follow the song": each new chunk plays itself, then waits for the typing.
+  useEffect(() => {
+    if (!following || t.phase !== "typing") return;
+    if (autoPlayedRef.current === t.index) return;
+    const from = (ready ? controller.getTime() : 0) + offset;
+    const span = findVerseSpan(sync.lines, sync.index, t.current.answer, from - 1.5);
+    if (!span) return;
+    autoPlayedRef.current = t.index;
+    pauseAtRef.current = span.end;
+    setMediaMounted(true);
+    setListening(true);
+    seekToTime(span.start);
+    // A seek issued right after a programmatic pause is sometimes swallowed
+    // while the player settles, so nudge play once more shortly after.
+    const retry = window.setTimeout(() => controller.play(), 400);
+    return () => window.clearTimeout(retry);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [following, t.index, t.phase, sync, ready]);
+
   function toggleListen() {
     if (listening) {
+      pauseAtRef.current = null;
       controller.pause();
       setListening(false);
     } else {
+      // Opening the player by hand means "just play" — no auto-stop.
+      pauseAtRef.current = null;
       setMediaMounted(true);
       setListening(true);
     }
   }
 
+  function togglePace() {
+    const next: Pace = pace === "song" ? "self" : "song";
+    setPace(next);
+    savePrefs({ ...prefs, pace: next });
+    if (next === "self") {
+      pauseAtRef.current = null;
+    } else {
+      // Let the current chunk play itself right away.
+      autoPlayedRef.current = null;
+    }
+  }
+
   function playCurrentVerse() {
     const from = (ready ? controller.getTime() : 0) + offset;
-    const time = findVerseTime(sync.index, t.current.answer, from - 1.5);
-    if (time == null) return;
+    const span = findVerseSpan(sync.lines, sync.index, t.current.answer, from - 1.5);
+    if (!span) return;
+    pauseAtRef.current = span.end;
     setMediaMounted(true);
     setListening(true);
-    seekToTime(time);
+    seekToTime(span.start);
     inputRef.current?.focus();
   }
 
@@ -208,16 +274,21 @@ export function Trainer({ items, meta, mode, onExit }: Props) {
   }
 
   function handleRestart() {
+    autoPlayedRef.current = null;
+    pauseAtRef.current = null;
     t.restart();
     goNextLine();
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      if (gradedWrong && text.trim() === "") handleMoveOn();
-      else handleCheck();
-    }
+    if (e.key !== "Enter") return;
+    // Typing a whole paragraph needs Enter for line breaks, so submitting
+    // moves to Ctrl/Cmd+Enter. One line per chunk keeps plain Enter.
+    const submit = isBlock ? e.ctrlKey || e.metaKey : !e.shiftKey;
+    if (!submit) return;
+    e.preventDefault();
+    if (gradedWrong && text.trim() === "") handleMoveOn();
+    else handleCheck();
   }
 
   const progressPct = t.phase === "done" ? 100 : (t.index / t.total) * 100;
@@ -234,6 +305,21 @@ export function Trainer({ items, meta, mode, onExit }: Props) {
         </button>
 
         <div className="masthead__actions">
+          {sync.hasSync && (
+            <button
+              type="button"
+              className={pace === "song" ? "pace-btn pace-btn--on" : "pace-btn"}
+              aria-pressed={pace === "song"}
+              onClick={togglePace}
+              title={
+                pace === "song"
+                  ? "A música toca cada trecho e para. Toque para voltar ao seu ritmo."
+                  : "Deixar a música tocar cada trecho e parar para você escrever."
+              }
+            >
+              {pace === "song" ? "Seguindo a música" : "Meu ritmo"}
+            </button>
+          )}
           <button
             type="button"
             className="listen-btn"
@@ -284,7 +370,7 @@ export function Trainer({ items, meta, mode, onExit }: Props) {
             <span className="progress__section">{t.current.section ?? "Letra"}</span>
             <span className="chips">
               <span className="chip">
-                Verso <strong>{t.index + 1}</strong>/{t.total}
+                {isBlock ? "Trecho" : "Verso"} <strong>{t.index + 1}</strong>/{t.total}
               </span>
               <span className="chip">
                 Sequência <strong>{t.stats.streak}</strong>
@@ -316,9 +402,19 @@ export function Trainer({ items, meta, mode, onExit }: Props) {
               transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
             >
               <p className="card__label">
-                {mode === "dictation" ? "Ouça e escreva em inglês" : "Escreva em inglês"}
+                {mode === "dictation"
+                  ? isBlock
+                    ? "Ouça e escreva o parágrafo em inglês"
+                    : "Ouça e escreva em inglês"
+                  : isBlock
+                    ? "Escreva o parágrafo em inglês"
+                    : "Escreva em inglês"}
               </p>
-              <p className={`prompt ${mode === "dictation" ? "prompt--dictation" : ""}`}>
+              <p
+                className={`prompt ${mode === "dictation" ? "prompt--dictation" : ""} ${
+                  isBlock ? "prompt--block" : ""
+                }`}
+              >
                 {t.current.prompt}
               </p>
 
@@ -326,11 +422,23 @@ export function Trainer({ items, meta, mode, onExit }: Props) {
                 {t.hintLevel > 0 ? buildHint(t.current.answer, t.hintLevel) : "\u00A0"}
               </p>
 
-              {currentVerseTime != null && (
+              {currentSpan && (
                 <button type="button" className="verse-listen" onClick={playCurrentVerse}>
                   <span className="verse-listen__icon" aria-hidden="true">▶</span>
-                  Ouvir este verso
+                  {following
+                    ? isBlock
+                      ? "Tocar o trecho de novo"
+                      : "Tocar o verso de novo"
+                    : isBlock
+                      ? "Ouvir este trecho"
+                      : "Ouvir este verso"}
                 </button>
+              )}
+
+              {followUnavailable && (
+                <p className="alert alert--notice alert--tight">
+                  Essa música não tem letra sincronizada, então o treino segue no seu ritmo.
+                </p>
               )}
 
               <label className="sr-only" htmlFor="answer">
@@ -340,12 +448,16 @@ export function Trainer({ items, meta, mode, onExit }: Props) {
                 id="answer"
                 ref={inputRef}
                 className="input"
-                rows={2}
+                rows={isBlock ? Math.min(8, Math.max(3, answerLines)) : 2}
                 value={text}
                 disabled={locked}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={onKeyDown}
-                placeholder="digite em inglês e aperte Enter…"
+                placeholder={
+                  isBlock
+                    ? "escreva o trecho, uma linha por verso — Ctrl+Enter confere…"
+                    : "digite em inglês e aperte Enter…"
+                }
                 autoComplete="off"
                 autoCapitalize="off"
                 autoCorrect="off"
@@ -362,7 +474,7 @@ export function Trainer({ items, meta, mode, onExit }: Props) {
                       Ver resposta
                     </button>
                     <button className="btn btn--ghost btn--spacer" onClick={handleMoveOn}>
-                      Próximo verso ›
+                      {isBlock ? "Próximo trecho ›" : "Próximo verso ›"}
                     </button>
                   </>
                 ) : (

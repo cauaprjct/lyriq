@@ -66,12 +66,28 @@ function parseArtistTitle(rawTitle, author) {
   return { artist: stripArtist(author || ""), song: cleaned };
 }
 
+/**
+ * Split the lyrics into lines, keeping a single empty line wherever the source
+ * had a blank one. Those blanks are the song's own section breaks (verse,
+ * chorus…) and the app uses them to offer "type a whole paragraph".
+ */
 function toLines(lyrics) {
-  return lyrics
+  const raw = lyrics
     .replace(/\r/g, "")
     .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
+    .map((l) => l.trim());
+
+  const out = [];
+  for (const line of raw) {
+    if (line.length === 0) {
+      // collapse runs of blanks, and never start with one
+      if (out.length > 0 && out[out.length - 1] !== "") out.push("");
+    } else {
+      out.push(line);
+    }
+  }
+  while (out.length > 0 && out[out.length - 1] === "") out.pop();
+  return out;
 }
 
 async function fetchOEmbed(videoId) {

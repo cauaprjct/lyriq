@@ -220,6 +220,34 @@ button {
   animation: pulse 1.6s var(--ease) infinite;
 }
 
+/* Pace switch: "my rhythm" vs letting the song lead. */
+.pace-btn {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  transition: color 0.18s var(--ease), border-color 0.18s var(--ease),
+    background 0.18s var(--ease);
+}
+
+.pace-btn:hover {
+  color: var(--ink);
+  border-color: var(--border-strong);
+}
+
+.pace-btn--on {
+  color: var(--primary-ink);
+  background: var(--primary);
+  border-color: transparent;
+}
+
+.pace-btn--on:hover {
+  color: var(--primary-ink);
+}
+
 @keyframes pulse {
   50% {
     opacity: 0.35;
@@ -322,6 +350,14 @@ button {
   color: var(--ink);
   margin-bottom: 18px;
   text-wrap: balance;
+}
+
+/* Paragraph chunk: smaller type, and the line breaks are meaningful. */
+.prompt--block {
+  font-size: clamp(1.15rem, 3vw, 1.45rem);
+  line-height: 1.4;
+  white-space: pre-line;
+  text-wrap: pretty;
 }
 
 .hint {
@@ -768,6 +804,13 @@ button {
   border-color: oklch(0.8 0.135 72 / 0.35);
 }
 
+/* Inline note inside the training card, where vertical space is tight. */
+.alert--tight {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  font-size: 0.82rem;
+}
+
 /* ---------- Review step ---------- */
 .review-head {
   display: flex;
@@ -868,6 +911,46 @@ select.input {
 
 .seg:not(.seg--on):hover {
   color: var(--ink);
+}
+
+.segmented--sm .seg {
+  padding: 6px 13px;
+  font-size: 0.8rem;
+}
+
+/* ---------- Training preferences (setup) ---------- */
+.prefs {
+  margin-top: 18px;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 4px;
+}
+
+.prefs__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 13px 0 0;
+}
+
+.prefs__label {
+  display: grid;
+  gap: 2px;
+  min-width: min(100%, 15rem);
+  flex: 1 1 auto;
+}
+
+.prefs__title {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.prefs__note {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
 }
 
 /* ---------- Song chip (trainer header) ---------- */

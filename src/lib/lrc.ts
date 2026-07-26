@@ -104,3 +104,51 @@ export function findVerseTime(
   if (!times || times.length === 0) return null;
   return times.find((t) => t >= afterT - 0.25) ?? times[0];
 }
+
+/** Start of the first line sung after `t` (null once the song has no more lines). */
+export function nextLineTime(display: SyncedLine[], t: number): number | null {
+  for (const line of display) {
+    if (line.time > t + 0.05) return line.time;
+  }
+  return null;
+}
+
+/** Where a trainer chunk begins and ends in the recording. `end` null = plays out. */
+export interface VerseSpan {
+  start: number;
+  end: number | null;
+}
+
+/**
+ * Locate a trainer chunk (one line, or a whole paragraph) in the timeline.
+ * The end is the moment the *next* line starts, which is what lets playback
+ * stop right after the chunk instead of running over the following verses.
+ */
+export function findVerseSpan(
+  display: SyncedLine[],
+  index: Map<string, number[]>,
+  answer: string,
+  afterT = 0
+): VerseSpan | null {
+  const lines = answer
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return null;
+
+  const start = findVerseTime(index, lines[0], afterT);
+  if (start == null) return null;
+  if (lines.length === 1) return { start, end: nextLineTime(display, start) };
+
+  // Prefer the real timestamp of the closing line; if this song's lyrics don't
+  // match it (different source/wording), count lines forward from the start.
+  const matchedLast = findVerseTime(index, lines[lines.length - 1], start);
+  if (matchedLast != null && matchedLast >= start) {
+    return { start, end: nextLineTime(display, matchedLast) };
+  }
+
+  const startIdx = display.findIndex((l) => Math.abs(l.time - start) < 0.01);
+  const lastIdx = startIdx === -1 ? -1 : startIdx + lines.length - 1;
+  const fallbackLast = lastIdx >= 0 && lastIdx < display.length ? display[lastIdx].time : start;
+  return { start, end: nextLineTime(display, fallbackLast) };
+}
