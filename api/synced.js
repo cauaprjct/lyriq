@@ -27,7 +27,13 @@ async function lrclibSearch(artist, title) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  // No CORS header on purpose: same origin as the app, so none is needed.
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    res.setHeader("Allow", "GET, HEAD");
+    res.status(405).json({ error: "Use GET." });
+    return;
+  }
+
   res.setHeader("Cache-Control", "s-maxage=604800, stale-while-revalidate");
 
   const { artist = "", title = "", duration } = req.query;

@@ -107,7 +107,15 @@ async function fetchLyrics(artist, song) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  // No CORS header on purpose: the app is served from this same origin, so it
+  // never needs one, and a wildcard would just invite other sites to proxy
+  // through us.
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    res.setHeader("Allow", "GET, HEAD");
+    res.status(405).json({ error: "Use GET." });
+    return;
+  }
+
   res.setHeader("Cache-Control", "s-maxage=86400, stale-while-revalidate");
 
   const { url, artist: artistOverride, title: titleOverride } = req.query;
