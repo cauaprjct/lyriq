@@ -1,13 +1,15 @@
 # Lyriq — estado do projeto e o que falta
 
-Documento de acompanhamento. Última atualização: 26/jul/2026.
+Documento de acompanhamento. Última atualização: 26/jul/2026 (revisão do projeto,
+com acertos de modo de treino, `PRODUCT.md` e screenshots).
 
 ---
 
 ## Resumo em uma linha
 
-Fases 1 e 2 estão **commitadas, no GitHub e no ar**. Nada pendente no código —
-o que resta são decisões de produto (Fases 3 e 4).
+Fases 1 e 2 e os acertos de 26/jul estão **commitados, no GitHub e no ar**. Nada
+pendente no código — o que resta são decisões de produto (Fases 3 e 4) e a dívida
+de teste automatizado.
 
 ---
 
@@ -18,7 +20,7 @@ o que resta são decisões de produto (Fases 3 e 4).
 | Endereço público | https://lyriq-learn.vercel.app |
 | Projeto na Vercel | `lyriq` (conta `cauaprjcts-projects`) |
 | Deploy | Vercel CLI (`vercel --prod`), autenticada como `cauaprjct` |
-| Último deploy | 26/jul/2026 — Fase 2, bundle `index-xFrh9wDz.js` |
+| Último deploy | 26/jul/2026 — acertos do modo de treino, bundle `index-CQExtR1N.js` (o anterior, da Fase 2, era `index-xFrh9wDz.js`) |
 
 Detalhes que valem lembrar:
 
@@ -39,9 +41,12 @@ Detalhes que valem lembrar:
 | Item | Valor |
 | --- | --- |
 | Repositório | https://github.com/cauaprjct/lyriq |
-| Último commit | `3d99a39` — preferências de treino: tamanho do trecho e ritmo (Fase 2) |
-| Anteriores | `a80edee` (arrumação do `.gitignore`), `a5efaba` (Fase 1), `7c3a61b` (analytics), `d0e882f` (commit inicial) |
-| Branch | `main`, alinhada com `origin/main` em `3d99a39` (verificado com `git fetch`) |
+| Último commit | `086126f` — `PRODUCT.md` e screenshots atualizados, mais o commit deste documento |
+| Anteriores | `8a025e8` (persistência do modo), `ee073c1` (README), `6dcff32` (este documento), `3d99a39` (Fase 2), `a80edee` (arrumação do `.gitignore`), `a5efaba` (Fase 1), `7c3a61b` (analytics), `d0e882f` (commit inicial) |
+| Branch | `main`, empurrada para `origin/main` (`ee073c1..086126f`) |
+
+Só `8a025e8` mexe em código; `086126f` e este documento são documentação e
+imagens.
 
 ⚠️ **O git desta máquina não tem identidade configurada** (`user.name` /
 `user.email`). Todos os commits até aqui foram feitos passando a identidade só no
@@ -151,14 +156,105 @@ src/styles.css         .prefs, .segmented--sm, .pace-btn, .prompt--block, .alert
 
 ---
 
+## Acertos de 26/jul — commitados e no ar
+
+Revisão do projeto contra o que estava documentado. Três achados de documentação e
+um de comportamento.
+
+### 1. O modo de treino não era lembrado (código, `8a025e8`)
+
+O "Modo" (tradução/ditado) era estado local do `Setup`, então voltava para
+tradução a cada recarregamento, enquanto tamanho do trecho e ritmo eram
+restaurados. O README anunciava os três lado a lado, como se funcionassem igual.
+
+Agora `mode` faz parte de `Prefs` e é gravado junto dos outros dois. Em vez de
+deixar o valor em dois lugares, o modo saiu da assinatura da sessão: `Trainer` lê
+`prefs.mode`, então existe uma fonte única.
+
+```
+src/types.ts           mode entra em Prefs
+src/lib/prefs.ts       MODES, padrão "translate", validação defensiva no load
+src/screens/Setup.tsx  mode vem de prefs; o toggle grava via updatePrefs
+src/screens/Trainer.tsx  lê prefs.mode; prop `mode` removida
+src/App.tsx            Session não carrega mais mode
+```
+
+**Como foi verificado** (dev local com o proxy temporário para produção, já revertido)
+
+- Trocar para Ditado gravou `{"mode":"dictation","chunk":"line","pace":"self"}`; ao
+  recarregar, Ditado seguia marcado.
+- Preferências no formato antigo (`{chunk:"block",pace:"song"}`, sem `mode`, que é
+  o que usuários atuais têm sob a mesma chave) carregam sem quebrar: modo cai no
+  padrão e trecho/ritmo são preservados. A chave `lyriq.prefs.v1` não precisou de
+  bump.
+- Valores inválidos escritos à mão caem todos nos padrões.
+- Ditado abre com a dica de ouvido e monta o player; tradução abre sem cair na
+  dica de ditado. Os dois caminhos foram exercitados porque a assinatura de
+  `onStart` mudou.
+- Build limpo: `tsc -b && vite build`, 402 módulos, bundle `index-CQExtR1N.js`.
+- Sem erros de console do app. O embed do YouTube gera dois erros de requisição de
+  anúncio (doubleclick) bloqueada no ambiente de teste — não são do app.
+
+**Verificado em produção depois do deploy**
+
+- A Vercel gerou o mesmo bundle do build local, `index-CQExtR1N.js` — o que está no
+  ar é o que foi testado aqui.
+- Home em HTTP 200 servindo esse bundle; `/api/song` e `/api/synced` em HTTP 200.
+- O fix conferido no site publicado: trocar para Ditado gravou
+  `{"mode":"dictation","chunk":"line","pace":"self"}` e, ao recarregar, Ditado
+  seguia marcado.
+
+### 2. `PRODUCT.md` estava desatualizado (documentação, `086126f`)
+
+Descrevia o produto como "um treinador focado em uma única música (Pompeii)", de
+antes do catálogo. Reescrito para o produto atual: 10 músicas por nível mais
+qualquer link do YouTube, as três preferências de treino e a escolha de idioma da
+dica. Ganhou também uma seção "Privacy stance", porque "nada sai do navegador" hoje
+é posição de produto e não só detalhe de implementação — é justamente o que a Fase
+3 pressiona. O princípio "One song, done exceptionally" saiu: o produto não é mais
+isso.
+
+O `DESIGN.md` é da mesma época e continua valendo — a paleta brasa/cinza e o par
+Fraunces + Inter são o que está no CSS.
+
+### 3. As screenshots do README eram da interface antiga (documentação, `086126f`)
+
+`screenshots/home.png` e `trainer.png` eram do commit inicial, anteriores ao
+catálogo e às preferências. Recapturadas em 1280px:
+
+- `home.png` — catálogo com os 10 cards, filtro por nível e o campo de link.
+- `trainer.png` — a correção palavra por palavra com os quatro tipos de marcação
+  (acerto, erro, falta, sobra), usando a demo embutida, que não depende de rede.
+
+O card de "Believer" aparece com um bloco verde. Foi checado: o defeito está no
+frame que o YouTube serve para aquele vídeo, em todas as resoluções
+(`hqdefault`, `mqdefault`, `sddefault`, `maxresdefault`, 34% a 47% de pixels
+verdes). Não é do nosso render, e a captura ficou fiel ao que o usuário vê.
+
+### 4. Este documento apontava um commit velho (documentação)
+
+Registrava `3d99a39` como último commit, quando já havia `6dcff32` e `ee073c1`
+depois. Corrigido acima.
+
+---
+
 ## O que falta
 
 ### Imediato
 
-Nada no código. As duas fases estão commitadas, no GitHub e publicadas.
+Nada no código. Fases 1 e 2 e os acertos de 26/jul estão commitados, no GitHub e
+publicados.
 
 Opcional: aposentar o domínio `ritmo-pompeii.vercel.app` em Settings → Domains
 (remover só o domínio, **não apagar o projeto**).
+
+### Dívida conhecida
+
+Não existe teste automatizado: `package.json` tem só `dev`, `build` e `preview`.
+Toda a verificação registrada aqui foi manual — é boa, com números, mas ninguém
+a repete sozinho. Vale decidir se entra um `vitest` para as partes puras
+(`diff.ts`, `lrc.ts`, `lyrics.ts`, `prefs.ts`), que é onde um erro silencioso
+custaria mais.
 
 ### Fases seguintes (dependem de decisão sua)
 
