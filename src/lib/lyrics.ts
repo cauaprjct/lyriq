@@ -9,12 +9,51 @@ export function textToLines(text: string): string[] {
     .filter(Boolean);
 }
 
+/**
+ * Non-lexical syllables, written in collapsed form: repeated letters are
+ * squeezed before the lookup, so "ohhh", "laaa" and "mmm" all land here.
+ */
+const FILLER_SYLLABLES = new Set([
+  "eh",
+  "oh",
+  "ah",
+  "la",
+  "na",
+  "da",
+  "yeah",
+  "woah",
+  "whoa",
+  "hey",
+  "uh",
+  "o",
+  "m",
+  "hm",
+]);
+
+/** "ohhh" -> "oh", "laaa" -> "la", "mmm" -> "m". */
+function collapseRepeats(word: string): string {
+  return word.replace(/(.)\1+/g, "$1");
+}
+
+/**
+ * True when a word carries no meaning of its own — a chant syllable, possibly
+ * stretched ("ohhh") or chained with separators ("eh-eh-o").
+ *
+ * The whole word has to be filler. An earlier version tested only the start,
+ * which quietly classified ordinary words as filler: "only" and "over" begin
+ * with "o", "day" with "da", "land" with "la".
+ */
+function isFillerWord(word: string): boolean {
+  const parts = word.split(/[-']/).filter(Boolean);
+  if (parts.length === 0) return true;
+  return parts.every((part) => FILLER_SYLLABLES.has(collapseRepeats(part)));
+}
+
 /** Heuristic: drop obvious non-lexical filler lines (e.g. "Eh-eh-o eh-o", "La la la"). */
 export function isFiller(line: string): boolean {
   const words = line.toLowerCase().replace(/[^a-z\s'-]/g, "").split(/\s+/).filter(Boolean);
   if (words.length === 0) return true;
-  const fillerRe = /^(eh|oh|ah|la|na|da|yeah|woah|whoa|ooh|oo|hey|mmm|hmm|uh|o)+[-']?.*$/i;
-  return words.every((w) => fillerRe.test(w));
+  return words.every(isFillerWord);
 }
 
 /**
