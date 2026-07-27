@@ -1,14 +1,13 @@
 import { useState } from "react";
 import { Analytics } from "@vercel/analytics/react";
 import { APP } from "./config";
-import type { Mode, Prefs, SongMeta, TrainerItem } from "./types";
+import type { Prefs, SongMeta, TrainerItem } from "./types";
 import { Setup } from "./screens/Setup";
 import { Trainer } from "./screens/Trainer";
 
 interface Session {
   items: TrainerItem[];
   meta: SongMeta;
-  mode: Mode;
   prefs: Prefs;
 }
 
@@ -28,12 +27,11 @@ export function App() {
           <Trainer
             items={session.items}
             meta={session.meta}
-            mode={session.mode}
             prefs={session.prefs}
             onExit={() => setSession(null)}
           />
         ) : (
-          <Setup onStart={(items, meta, mode, prefs) => setSession({ items, meta, mode, prefs })} />
+          <Setup onStart={(items, meta, prefs) => setSession({ items, meta, prefs })} />
         )}
 
         <footer className="foot">

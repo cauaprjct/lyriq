@@ -7,6 +7,7 @@ export type Chunk = "line" | "block";
 export type Pace = "self" | "song";
 
 export interface Prefs {
+  mode: Mode;
   chunk: Chunk;
   pace: Pace;
 }

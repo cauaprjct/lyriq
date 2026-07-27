@@ -7,7 +7,6 @@ import {
   type CatalogSong,
   type Level,
   type Chunk,
-  type Mode,
   type Pace,
   type Prefs,
   type SongMeta,
@@ -24,7 +23,7 @@ type Step = "input" | "review";
 type Filter = Level | "todos";
 
 interface Props {
-  onStart: (items: TrainerItem[], meta: SongMeta, mode: Mode, prefs: Prefs) => void;
+  onStart: (items: TrainerItem[], meta: SongMeta, prefs: Prefs) => void;
 }
 
 const FILTERS: { key: Filter; label: string }[] = [
@@ -41,9 +40,9 @@ export function Setup({ onStart }: Props) {
   const [artist, setArtist] = useState("");
   const [song, setSong] = useState("");
   const [lyricsText, setLyricsText] = useState("");
-  const [mode, setMode] = useState<Mode>("translate");
   const [lang, setLang] = useState("pt-BR");
   const [prefs, setPrefs] = useState<Prefs>(() => loadPrefs());
+  const mode = prefs.mode;
 
   const [busy, setBusy] = useState(false);
   const [busyLabel, setBusyLabel] = useState("");
@@ -123,7 +122,7 @@ export function Setup({ onStart }: Props) {
     const finalMeta: SongMeta = { ...meta, artist, song };
 
     if (mode === "dictation") {
-      onStart(buildItems(blocks, [], "dictation", prefs.chunk), finalMeta, "dictation", prefs);
+      onStart(buildItems(blocks, [], "dictation", prefs.chunk), finalMeta, prefs);
       return;
     }
 
@@ -137,12 +136,7 @@ export function Setup({ onStart }: Props) {
           "Algumas linhas não foram traduzidas (limite do tradutor). Você pode revisar no treino ou usar o modo ditado."
         );
       }
-      onStart(
-        buildItems(blocks, translations, "translate", prefs.chunk),
-        finalMeta,
-        "translate",
-        prefs
-      );
+      onStart(buildItems(blocks, translations, "translate", prefs.chunk), finalMeta, prefs);
     } catch (e) {
       setError(
         e instanceof Error ? `${e.message} Tente o modo ditado.` : "Falha ao traduzir."
@@ -280,7 +274,9 @@ export function Setup({ onStart }: Props) {
               <button
                 type="button"
                 className="linklike"
-                onClick={() => onStart(DEMO_ITEMS, DEMO_META, "translate", { ...prefs, chunk: "line" })}
+                onClick={() =>
+                  onStart(DEMO_ITEMS, DEMO_META, { ...prefs, mode: "translate", chunk: "line" })
+                }
                 disabled={busy}
               >
                 Ver uma demonstração
@@ -343,7 +339,7 @@ export function Setup({ onStart }: Props) {
                   type="radio"
                   name="mode"
                   checked={mode === "translate"}
-                  onChange={() => setMode("translate")}
+                  onChange={() => updatePrefs({ mode: "translate" })}
                 />
                 Tradução
               </label>
@@ -352,7 +348,7 @@ export function Setup({ onStart }: Props) {
                   type="radio"
                   name="mode"
                   checked={mode === "dictation"}
-                  onChange={() => setMode("dictation")}
+                  onChange={() => updatePrefs({ mode: "dictation" })}
                 />
                 Ditado
               </label>

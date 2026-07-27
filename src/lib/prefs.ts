@@ -1,4 +1,4 @@
-import type { Chunk, Pace, Prefs } from "../types";
+import type { Chunk, Mode, Pace, Prefs } from "../types";
 
 /**
  * Training preferences, remembered in the browser only (same stance as
@@ -9,10 +9,12 @@ import type { Chunk, Pace, Prefs } from "../types";
 const KEY = "lyriq.prefs.v1";
 
 export const DEFAULT_PREFS: Prefs = {
+  mode: "translate",
   chunk: "line",
   pace: "self",
 };
 
+const MODES: Mode[] = ["translate", "dictation"];
 const CHUNKS: Chunk[] = ["line", "block"];
 const PACES: Pace[] = ["self", "song"];
 
@@ -23,6 +25,7 @@ export function loadPrefs(): Prefs {
     if (!raw) return { ...DEFAULT_PREFS };
     const parsed = JSON.parse(raw) as Partial<Prefs>;
     return {
+      mode: MODES.includes(parsed?.mode as Mode) ? (parsed.mode as Mode) : DEFAULT_PREFS.mode,
       chunk: CHUNKS.includes(parsed?.chunk as Chunk)
         ? (parsed.chunk as Chunk)
         : DEFAULT_PREFS.chunk,

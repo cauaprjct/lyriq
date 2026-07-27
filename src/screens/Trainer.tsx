@@ -12,7 +12,7 @@ import {
   parseLrc,
   type SyncedLine,
 } from "../lib/lrc";
-import type { Mode, Pace, Prefs, SongMeta, TrainerItem } from "../types";
+import type { Pace, Prefs, SongMeta, TrainerItem } from "../types";
 import { savePrefs } from "../lib/prefs";
 import { Feedback } from "../components/Feedback";
 import { Results } from "../components/Results";
@@ -28,7 +28,6 @@ const prefersReduced =
 interface Props {
   items: TrainerItem[];
   meta: SongMeta;
-  mode: Mode;
   prefs: Prefs;
   onExit: () => void;
 }
@@ -47,8 +46,9 @@ const EMPTY_SYNC: SyncState = {
   index: new Map(),
 };
 
-export function Trainer({ items, meta, mode, prefs, onExit }: Props) {
+export function Trainer({ items, meta, prefs, onExit }: Props) {
   const t = useTrainer(items);
+  const mode = prefs.mode;
   const isBlock = prefs.chunk === "block";
   const [pace, setPace] = useState<Pace>(prefs.pace);
   const wantsFollow = pace === "song";
