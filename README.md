@@ -15,7 +15,7 @@ correção **palavra por palavra** — enquanto a letra sincronizada acompanha o
    intermediário, avançado), ou cole qualquer URL do YouTube.
 2. O app resolve artista/música pelo oEmbed do YouTube, busca a letra e a tradução.
 3. Você revisa e edita a letra e a tradução antes de começar — nada é armazenado.
-4. Escolha como quer treinar:
+4. Escolha como quer treinar — as três escolhas ficam salvas para a próxima vez:
    - **Modo** — *tradução* (a dica aparece no seu idioma e você escreve o verso em
      inglês) ou *ditado* (ouça e escreva de ouvido, sem tradução).
    - **Tamanho do trecho** — uma frase por vez, ou um parágrafo inteiro. A divisão
@@ -48,7 +48,9 @@ Nada sai do navegador. Não há conta nem back-end próprio.
 
 - **Progresso por música** (melhor precisão, melhor sequência, número de sessões),
   em `localStorage` sob `lyriq.progress.v1`, com o id do vídeo como chave.
-- **Preferências de treino** (tamanho do trecho e ritmo), sob `lyriq.prefs.v1`.
+- **Preferências de treino** (modo, tamanho do trecho e ritmo), sob `lyriq.prefs.v1`.
+  As três voltam como você deixou; um valor antigo ou editado à mão cai no padrão
+  em vez de quebrar a tela.
 
 O catálogo guarda **só metadados** — artista, título e id do vídeo. As letras são
 buscadas na hora e nunca ficam no repositório.
