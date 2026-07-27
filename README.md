@@ -84,13 +84,46 @@ Build de produção:
 npm run build        # tsc -b && vite build
 ```
 
+## Testes
+
+```bash
+npm test             # vitest run
+npm run test:watch
+```
+
+Cobrem a lógica pura, que é onde um erro passaria calado: a correção palavra por
+palavra (`diff.ts`), o parse e a estrutura da letra sincronizada (`lrc.ts`), a
+divisão em versos e parágrafos (`lyrics.ts`) e a leitura defensiva das
+preferências (`prefs.ts`) — incluindo a compatibilidade com preferências salvas
+antes de o campo de modo existir. Os testes ficam ao lado do código, como
+`*.test.ts`, e o `npm run build` também os type-checa.
+
+Componentes e funções de `api/` não têm teste automatizado ainda.
+
+## Limites das funções
+
+As fontes de letra e tradução são gratuitas e limitam por IP — e o IP que aparece
+para elas é o das funções, compartilhado por todos os usuários. Então um pedido
+sem teto não seria só grande: ele consumiria a cota de que todo mundo depende. Por
+isso `/api/translate` recusa, com HTTP 413, mais de 400 linhas, mais de 20.000
+caracteres no total ou qualquer verso acima de 500 caracteres. Uma música longa
+fica bem abaixo disso.
+
+As funções também não emitem `Access-Control-Allow-Origin`: o app é servido da
+mesma origem e não precisa, e um curinga só serviria para outros sites gastarem a
+cota. Cada uma aceita apenas o seu método (GET nas duas de leitura, POST na
+tradução).
+
+Um limite por IP de verdade exigiria um armazenamento compartilhado (Vercel KV ou
+similar), que é uma dependência a mais — ainda não feito.
+
 ## Estrutura
 
 ```
 api/
   song.js         busca a letra; preserva linhas em branco como separador de parágrafo
   synced.js       proxy do LRCLIB (get + search)
-  translate.js    tradução
+  translate.js    tradução, com teto de tamanho por pedido
 src/
   screens/        Setup (catálogo, busca, revisão, preferências) e Trainer (treino)
   components/     MediaPanel (player + letra + sincronia), SyncedLyrics, Feedback, Results
@@ -102,6 +135,7 @@ src/
     prefs.ts      preferências de treino
     progress.ts   progresso local
     api.ts        chamadas às funções
+    *.test.ts     testes das partes puras (vitest)
   data/           catalog.ts (metadados das 10 músicas), demo.ts
 ESTADO.md         estado do projeto e o que falta
 PRODUCT.md        decisões de produto
