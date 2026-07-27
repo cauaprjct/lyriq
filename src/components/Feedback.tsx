@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import type { LineResult } from "../lib/diff";
+import type { LineResult, ResultToken } from "../lib/diff";
 
 const CheckIcon = () => (
   <svg className="status__icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -30,6 +30,41 @@ const reduceMotion =
   typeof window !== "undefined" &&
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+/**
+ * What a token means, in words. Colour alone never carries the distinction, so
+ * this text is both the pointer tooltip and what a screen reader announces.
+ */
+function describe(t: ResultToken): string | undefined {
+  switch (t.status) {
+    case "correct":
+      return undefined;
+    case "wrong":
+      return `voc\u00EA escreveu ${t.typed}, o certo \u00E9 ${t.expected}`;
+    case "missing":
+      return `faltou ${t.expected}`;
+    case "extra":
+      return `sobrou ${t.typed}`;
+  }
+}
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** One-line shape of the result, so the announcement leads with the summary. */
+function summarize(tokens: ResultToken[]): string {
+  const count = (s: ResultToken["status"]) => tokens.filter((t) => t.status === s).length;
+  const parts = [
+    [count("correct"), "certa", "certas"],
+    [count("wrong"), "errada", "erradas"],
+    [count("missing"), "faltando", "faltando"],
+    [count("extra"), "sobrando", "sobrando"],
+  ] as const;
+
+  return parts
+    .filter(([n]) => n > 0)
+    .map(([n, one, many]) => plural(n, one, many))
+    .join(", ");
+}
+
 export function Feedback({ result, expected }: Props) {
   const { tokens, isPerfect } = result;
 
@@ -42,16 +77,11 @@ export function Feedback({ result, expected }: Props) {
           : "Quase l\u00E1. Veja as palavras abaixo."}
       </p>
 
+      {!isPerfect && <p className="sr-only">{summarize(tokens)}.</p>}
+
       <div className="words">
         {tokens.map((t, i) => {
-          const label =
-            t.status === "correct"
-              ? undefined
-              : t.status === "wrong"
-                ? `errado, o certo \u00E9 ${t.expected}`
-                : t.status === "missing"
-                  ? `faltou ${t.expected}`
-                  : `sobrou ${t.typed}`;
+          const label = describe(t);
           return (
             <motion.span
               key={i}
@@ -61,10 +91,18 @@ export function Feedback({ result, expected }: Props) {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: reduceMotion ? 0 : i * 0.02, duration: 0.24 }}
             >
-              {t.status === "extra" ? t.typed : t.expected}
-              {t.status === "wrong" && (
-                <span className="word__typed">{t.typed}</span>
+              {label ? (
+                // The marks are visual shorthand; hide them and say it plainly.
+                <span aria-hidden="true">{t.status === "extra" ? t.typed : t.expected}</span>
+              ) : (
+                t.expected
               )}
+              {t.status === "wrong" && (
+                <span className="word__typed" aria-hidden="true">
+                  {t.typed}
+                </span>
+              )}
+              {label && <span className="sr-only">{label}</span>}
             </motion.span>
           );
         })}

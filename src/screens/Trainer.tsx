@@ -436,7 +436,7 @@ export function Trainer({ items, meta, prefs, onExit }: Props) {
               )}
 
               {followUnavailable && (
-                <p className="alert alert--notice alert--tight">
+                <p className="alert alert--notice alert--tight" role="status">
                   Essa música não tem letra sincronizada, então o treino segue no seu ritmo.
                 </p>
               )}

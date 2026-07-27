@@ -266,7 +266,11 @@ export function Setup({ onStart }: Props) {
               </button>
             </div>
 
-            {error && <p className="alert alert--error">{error}</p>}
+            {error && (
+              <p className="alert alert--error" role="alert">
+                {error}
+              </p>
+            )}
 
             <p className="setup-hint">
               Funciona melhor com músicas em inglês. Você revisa a letra e a tradução antes de
@@ -317,7 +321,11 @@ export function Setup({ onStart }: Props) {
             </div>
           )}
 
-          {notice && <p className="alert alert--notice">{notice}</p>}
+          {notice && (
+            <p className="alert alert--notice" role="status">
+              {notice}
+            </p>
+          )}
 
           <label className="card__label" htmlFor="lyrics" style={{ display: "block", marginTop: 4 }}>
             Letra — revise, corte o que não quiser
@@ -439,7 +447,11 @@ export function Setup({ onStart }: Props) {
             {prefs.pace === "song" && " Precisa de letra sincronizada — se a música não tiver, o treino segue no seu ritmo."}
           </p>
 
-          {error && <p className="alert alert--error">{error}</p>}
+          {error && (
+            <p className="alert alert--error" role="alert">
+              {error}
+            </p>
+          )}
 
           <div className="controls">
             <button className="btn btn--primary" onClick={handleStart} disabled={busy}>
