@@ -1,15 +1,17 @@
 # Lyriq — estado do projeto e o que falta
 
-Documento de acompanhamento. Última atualização: 26/jul/2026 (revisão do projeto,
-com acertos de modo de treino, `PRODUCT.md` e screenshots).
+Documento de acompanhamento. Última atualização: 26/jul/2026 (duas rodadas: os
+acertos de consistência e, depois, endurecimento das funções, testes e
+acessibilidade).
 
 ---
 
 ## Resumo em uma linha
 
-Fases 1 e 2 e os acertos de 26/jul estão **commitados, no GitHub e no ar**. Nada
-pendente no código — o que resta são decisões de produto (Fases 3 e 4) e a dívida
-de teste automatizado.
+Tudo até aqui está **commitado, no GitHub e no ar**: Fases 1 e 2, os acertos de
+consistência e a rodada de melhorias (limites nas funções, suíte de testes,
+acessibilidade). Nada pendente no código — o que resta são decisões de produto
+(Fases 3 e 4).
 
 ---
 
@@ -20,7 +22,8 @@ de teste automatizado.
 | Endereço público | https://lyriq-learn.vercel.app |
 | Projeto na Vercel | `lyriq` (conta `cauaprjcts-projects`) |
 | Deploy | Vercel CLI (`vercel --prod`), autenticada como `cauaprjct` |
-| Último deploy | 26/jul/2026 — acertos do modo de treino, bundle `index-CQExtR1N.js` (o anterior, da Fase 2, era `index-xFrh9wDz.js`) |
+| Último deploy | 26/jul/2026 — limites nas funções e acessibilidade, bundle `index-g5cGxe_9.js` |
+| Deploys anteriores | `index-CQExtR1N.js` (modo de treino), `index-xFrh9wDz.js` (Fase 2), `index-Cgt0EEjV.js` (Fase 1) |
 
 Detalhes que valem lembrar:
 
@@ -41,12 +44,11 @@ Detalhes que valem lembrar:
 | Item | Valor |
 | --- | --- |
 | Repositório | https://github.com/cauaprjct/lyriq |
-| Último commit | `086126f` — `PRODUCT.md` e screenshots atualizados, mais o commit deste documento |
-| Anteriores | `8a025e8` (persistência do modo), `ee073c1` (README), `6dcff32` (este documento), `3d99a39` (Fase 2), `a80edee` (arrumação do `.gitignore`), `a5efaba` (Fase 1), `7c3a61b` (analytics), `d0e882f` (commit inicial) |
-| Branch | `main`, empurrada para `origin/main` (`ee073c1..086126f`) |
-
-Só `8a025e8` mexe em código; `086126f` e este documento são documentação e
-imagens.
+| Último commit | `f6b81ff` — README com limites e testes, mais o commit deste documento |
+| Rodada de melhorias | `74fa290` (limites nas funções), `3885b7c` (heurístico de filler), `d59d550` (testes), `e453a73` (acessibilidade), `f6b81ff` (README) |
+| Rodada de consistência | `29ecf71` (este documento), `086126f` (`PRODUCT.md` + screenshots), `8a025e8` (persistência do modo) |
+| Antes disso | `ee073c1` (README), `6dcff32` (este documento), `3d99a39` (Fase 2), `a80edee` (arrumação do `.gitignore`), `a5efaba` (Fase 1), `7c3a61b` (analytics), `d0e882f` (commit inicial) |
+| Branch | `main`, empurrada para `origin/main` (`29ecf71..f6b81ff`) |
 
 ⚠️ **O git desta máquina não tem identidade configurada** (`user.name` /
 `user.email`). Todos os commits até aqui foram feitos passando a identidade só no
@@ -238,6 +240,114 @@ depois. Corrigido acima.
 
 ---
 
+## Melhorias de 26/jul — commitadas e no ar
+
+Segunda rodada, depois de ler o código que ainda não tinha sido revisado: as três
+funções em `api/`, as libs puras e os hooks.
+
+### 1. As funções eram proxies abertos, sem teto (`74fa290`)
+
+O achado mais sério da revisão. As três respondiam com
+`Access-Control-Allow-Origin: *`, sem autenticação e sem limite, e
+`/api/translate` aceitava um array `lines` de tamanho arbitrário.
+
+O problema não era o tamanho do pedido, era a cota: o MyMemory limita por IP, e o
+IP que ele vê é o da função, compartilhado por todos os usuários. O próprio código
+já sabia disso — `translateOne` detecta `quotaFinished` e existe o caminho de
+`partial`. Ou seja, dava para esgotar a cota de fora e deixar todo mundo com letra
+sem tradução, além de gastar invocações da conta.
+
+Agora `/api/translate` recusa com **413** acima de 400 linhas, 20.000 caracteres
+no total ou 500 caracteres num verso. Uma música longa fica bem abaixo dos três. O
+front já transforma esse erro em sugestão de usar o ditado, que não precisa de
+tradução.
+
+O `*` saiu das três: o app é servido da mesma origem e nunca precisou dele, e o
+curinga só servia para outros sites gastarem a cota. Cada função passou a aceitar
+só o próprio método.
+
+**Como foi verificado** (com `vercel dev`, que roda as funções junto, e depois em
+produção)
+
+| Caso | Resposta |
+| --- | --- |
+| 401 linhas | 413 |
+| 100 linhas de 400 caracteres (40 mil no total) | 413 |
+| verso de 501 caracteres | 413 |
+| `GET /api/translate` | 405 |
+| `POST /api/song`, `POST /api/synced` | 405 |
+| array vazio, corpo sem `lines` | 400 (como antes) |
+| tradução normal de 2 versos | 200, sem `partial` |
+| `/api/song` e `/api/synced` normais | 200 |
+| `Access-Control-Allow-Origin` em qualquer uma | ausente |
+
+Também conferido que `/api/song` segue devolvendo as linhas em branco (é o que
+alimenta o modo parágrafo), que o `Cache-Control` das duas de leitura continua no
+lugar e que URL inválida ainda dá 404.
+
+### 2. O heurístico de filler descartava palavras reais (`3885b7c`)
+
+O regex terminava em `.*`, então só verificava se a palavra **começava** com uma
+sílaba de preenchimento. "only" e "over" começam com "o", "day" com "da", "land"
+com "la". Como a linha é descartada quando todas as palavras parecem filler,
+versos curtos feitos dessas palavras saíam do treino sem aviso — "Days" ou
+"Day one", por exemplo.
+
+Agora a palavra inteira tem que ser filler, sílaba por sílaba, com letras
+repetidas colapsadas antes da comparação. Assim "ohhh" e "mmm" continuam sendo
+pegos, e "eh-eh-o" continua se separando pelos hífens.
+
+### 3. Suíte de testes nas partes puras (`d59d550`)
+
+Motivo concreto: para verificar a compatibilidade das preferências antigas, na
+rodada anterior, foi preciso subir servidor, abrir navegador e dirigir a interface.
+Isso é asserção de teste, não sessão manual.
+
+70 testes em `vitest` (versão fixa), nos quatro módulos onde um erro passaria
+calado:
+
+```
+diff.ts     alinhamento por LCS, pareamento em errado/faltou/sobrou, e a
+            tentativa que tem todas as palavras esperadas mas não é perfeita
+lrc.ts      parse de timestamp, limiar adaptativo de parágrafo, e o fallback
+            que estima o fim do trecho quando a última linha não casa
+lyrics.ts   divisão em versos e parágrafos, alinhamento das dicas entre
+            blocos, e a regressão do filler acima
+prefs.ts    leitura defensiva: formato antigo, valor inválido, JSON quebrado,
+            storage bloqueado e storage ausente
+```
+
+Ficam ao lado do código como `*.test.ts`, então o `npm run build` também os
+type-checa. Scripts: `npm test` e `npm run test:watch`.
+
+### 4. A correção agora é falada, não só colorida (`e453a73`)
+
+O `PRODUCT.md` promete nunca sinalizar acerto só por cor. Isso valia no nível da
+linha, que tem ícone mais frase, mas não no nível da palavra: o que fazia uma
+palavra ser errada, faltante ou sobrando vinha de cor mais atributo `title` — e
+`title` não é anunciado de forma confiável nem alcançável por teclado ou toque.
+
+Cada token incorreto agora esconde o atalho visual da tecnologia assistiva e
+oferece o mesmo sentido em texto, então o leitor de tela ouve "faltou X" em vez de
+uma palavra solta. As corretas seguem lidas normalmente. A região `aria-live` abre
+com uma contagem de uma linha, para o anúncio começar pela forma do resultado.
+O `title` continua para quem usa mouse.
+
+Os avisos que eram renderizados em silêncio ganharam papel: `role="alert"` nos
+erros do `Setup`, `role="status"` no aviso de tradução parcial e no aviso de ritmo
+do `Trainer`.
+
+**Como foi verificado** — em `vercel dev` e depois em produção: `aria-live`
+presente, todos os 6 tokens incorretos com texto falado, resumo lido como
+"3 certas, 2 erradas, 2 faltando, 2 sobrando", palavras corretas não escondidas, e
+o `role="alert"` aparecendo numa busca que falha. A estrutura da marcação foi
+preservada e a captura do painel confirma que o visual ficou idêntico.
+
+**Build e deploy** — `npm test` com 70 testes passando e `tsc -b && vite build`
+limpo, 402 módulos, bundle `index-g5cGxe_9.js`. A Vercel gerou o mesmo hash.
+
+---
+
 ## O que falta
 
 ### Imediato
@@ -250,11 +360,18 @@ Opcional: aposentar o domínio `ritmo-pompeii.vercel.app` em Settings → Domain
 
 ### Dívida conhecida
 
-Não existe teste automatizado: `package.json` tem só `dev`, `build` e `preview`.
-Toda a verificação registrada aqui foi manual — é boa, com números, mas ninguém
-a repete sozinho. Vale decidir se entra um `vitest` para as partes puras
-(`diff.ts`, `lrc.ts`, `lyrics.ts`, `prefs.ts`), que é onde um erro silencioso
-custaria mais.
+- **Sem limite por IP nas funções.** O teto de tamanho por pedido está posto, mas
+  quem insistir com muitos pedidos pequenos ainda consome a cota compartilhada.
+  Um limite de verdade precisa de armazenamento comum (Vercel KV ou Upstash), que
+  é dependência e conta nova — decisão sua.
+- **Tradução sem cache.** Registro de uma ideia que não funciona como imaginei:
+  colocar `Cache-Control` em `/api/translate` não resolveria, porque é `POST` e
+  CDN não cacheia resposta de POST. Para cachear seria preciso ou expor a
+  tradução como `GET` (com o problema de caber a letra na URL) ou guardar por
+  linha num KV. Fica em aberto.
+- **Teste só nas partes puras.** Componentes e as funções de `api/` seguem sem
+  teste automatizado; o que foi verificado nelas foi por navegador e por
+  requisição, registrado acima.
 
 ### Fases seguintes (dependem de decisão sua)
 
